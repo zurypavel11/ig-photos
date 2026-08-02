@@ -1,0 +1,4 @@
+anthropic
+requests
+Pillow
+opencv-python-headless
