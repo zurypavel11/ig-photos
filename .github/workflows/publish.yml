@@ -15,7 +15,7 @@ on:
     # potřeba časy jednou za půl roku ručně o hodinu posunout.
     - cron: "0 5 * * 2"    # úterý 7:00 ČR
     - cron: "0 13 * * 4"   # čtvrtek 15:00 ČR
-    - cron: "15 16 * * 0"  # neděle 18:15 ČR
+    - cron: "30 17 * * 0"  # neděle 19:30 ČR
   workflow_dispatch: {}
 
 permissions:
