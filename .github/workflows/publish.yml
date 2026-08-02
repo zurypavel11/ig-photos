@@ -8,7 +8,7 @@ on:
     # Teď v létě je ČR na UTC+2 (CEST), proto odečteno -2h od tvých časů:
     #   úterý 7:00 ČR   -> 5:00 UTC
     #   čtvrtek 15:00 ČR -> 13:00 UTC
-    #   neděle 18:15 ČR  -> 16:15 UTC
+    #   neděle 18:45 ČR  -> 16:45 UTC
     # POZOR: až v říjnu skončí letní čas (ČR přejde na UTC+1), tyhle časy
     # se posunou o hodinu dřív (např. úterý vyjde na 8:00 ČR místo 7:00).
     # GitHub cron neumí automatické přepočítání letního času - bude
