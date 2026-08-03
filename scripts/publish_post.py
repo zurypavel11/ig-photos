@@ -53,7 +53,7 @@ FONT_PATH_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
 ]
 
-POSITIONS = ["bottom-left", "top-left", "center-left", "bottom-right"]
+POSITIONS = ["bottom-left", "bottom-right"]
 BOX_COLORS = [(255, 255, 255, 255), (245, 245, 240, 255)]
 
 
@@ -276,11 +276,15 @@ def main():
     save_json(TOPICS_PATH, topics)
 
     new_photo_path = USED_DIR / photo.name
-    photo.rename(new_photo_path)
+    git_targets = [str(TOPICS_PATH.relative_to(REPO_ROOT))]
+    if photo.exists():
+        photo.rename(new_photo_path)
+        git_targets.append(str(new_photo_path.relative_to(REPO_ROOT)))
+    else:
+        print(f"VAROVANI: {photo} uz v photos/pool/ nebyla nalezena (mozna soubezny beh), "
+              f"preskakuji presun do photos/used/ - stav tematu se presto ulozi.")
 
-    git("add",
-        str(TOPICS_PATH.relative_to(REPO_ROOT)),
-        str(new_photo_path.relative_to(REPO_ROOT)))
+    git("add", *git_targets)
     git("commit", "-m", f"state: published topic {topic['id']} ({post_id})")
     git("push")
 
