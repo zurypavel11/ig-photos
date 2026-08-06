@@ -64,7 +64,11 @@ FONT_PATH_CANDIDATES = [
 ]
 
 POSITIONS = ["bottom-left", "bottom-right"]
-BOX_COLORS = [(255, 255, 255, 255), (245, 245, 240, 255)]
+BOX_STYLES = [
+    ((255, 255, 255, 255), (15, 15, 15, 255)),
+    ((20, 20, 22, 235), (255, 255, 255, 255)),
+    ((245, 240, 230, 255), (15, 15, 15, 255)),
+]
 
 
 def load_json(path, default):
@@ -251,7 +255,7 @@ def add_overlay(photo_path, headline, out_path):
     )
     box_x = margin if "left" in position else w - box_w - margin
 
-    color = random.choice(BOX_COLORS)
+    color, text_color = random.choice(BOX_STYLES)
     overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
     odraw.rounded_rectangle(
@@ -260,7 +264,7 @@ def add_overlay(photo_path, headline, out_path):
     )
     ty = box_y + pad_y
     for line in lines:
-        odraw.text((box_x + pad_x, ty), line, font=font, fill=(15, 15, 15, 255))
+        odraw.text((box_x + pad_x, ty), line, font=font, fill=text_color)
         ty += line_spacing
 
     combined = Image.alpha_composite(img, overlay)
