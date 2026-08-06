@@ -31,6 +31,8 @@ from PIL import Image, ImageDraw, ImageFont
 import cv2
 import requests
 import anthropic
+import smtplib
+from email.mime.text import MIMEText
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
@@ -43,6 +45,14 @@ GITHUB_USER = "zurypavel11"
 GITHUB_REPO = "ig-photos"
 IG_USER_ID = "17841401986984284"
 IG_GRAPH_VERSION = "v21.0"
+
+SONNET_INPUT_PRICE_PER_MTOK = 2.0
+SONNET_OUTPUT_PRICE_PER_MTOK = 10.0
+
+
+def estimate_cost_usd(input_tokens, output_tokens):
+    return (input_tokens / 1_000_000 * SONNET_INPUT_PRICE_PER_MTOK) + \
+           (output_tokens / 1_000_000 * SONNET_OUTPUT_PRICE_PER_MTOK)
 
 # Kandidáti na monospace font - script vezme první, co na systému existuje.
 # macOS má Courier New/Menlo předinstalované, Linux (GitHub Actions runner) DejaVu/Liberation.
@@ -129,6 +139,23 @@ def next_photo():
     return random.choice(good)
 
 
+def crop_to_feed_ratio(img, target_ratio=4 / 5):
+    """Center-crop na bezpecny pomer stran pro Instagram feed (4:5), at
+    Instagram sam neorizne neco jineho a text overlay nezmizi mimo
+    viditelnou oblast (od ledna 2026 ma grid profilu pomer 3:4)."""
+    w, h = img.size
+    current_ratio = w / h
+    if current_ratio > target_ratio:
+        new_w = int(h * target_ratio)
+        left = (w - new_w) // 2
+        img = img.crop((left, 0, left + new_w, h))
+    elif current_ratio < target_ratio:
+        new_h = int(w / target_ratio)
+        top = (h - new_h) // 2
+        img = img.crop((0, top, w, top + new_h))
+    return img
+
+
 def resize_to_max_dimension(img, max_dim=1600):
     w, h = img.size
     if max(w, h) <= max_dim:
@@ -153,11 +180,13 @@ Odpověz PŘESNĚ v tomto formátu, nic navíc:
 HEADLINE: <text>
 CAPTION: <text>"""
     msg = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-5",
         max_tokens=800,
         messages=[{"role": "user", "content": prompt}],
     )
     text = msg.content[0].text
+    cost = estimate_cost_usd(msg.usage.input_tokens, msg.usage.output_tokens)
+
     headline, caption = "", ""
     in_caption = False
     for line in text.splitlines():
@@ -168,7 +197,26 @@ CAPTION: <text>"""
             in_caption = True
         elif in_caption:
             caption += "\n" + line
-    return headline, caption.strip()
+    return headline, caption.strip(), cost
+
+
+def send_email_notification(subject, body):
+    gmail_address = os.environ.get("GMAIL_ADDRESS")
+    gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
+    if not gmail_address or not gmail_app_password:
+        print("VAROVANI: GMAIL_ADDRESS/GMAIL_APP_PASSWORD nejsou nastavene - e-mail se neodesila.")
+        return
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = gmail_address
+    msg["To"] = gmail_address
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(gmail_address, gmail_app_password)
+            server.send_message(msg)
+        print("E-mail notifikace odeslana.")
+    except Exception as e:
+        print(f"VAROVANI: odeslani e-mailu selhalo: {e}")
 
 
 def wrap_headline(headline):
@@ -181,7 +229,8 @@ def wrap_headline(headline):
 
 def add_overlay(photo_path, headline, out_path):
     img = Image.open(photo_path).convert("RGBA")
-    img = resize_to_max_dimension(img, max_dim=1600)
+    img = crop_to_feed_ratio(img, target_ratio=4 / 5)
+    img = resize_to_max_dimension(img, max_dim=1350)
     w, h = img.size
     font_size = int(w * 0.052)
     font = pick_font(font_size)
@@ -246,8 +295,9 @@ def main():
     print(f"Téma [{topic['pillar_name']}]: {topic['title']}")
     print(f"Fotka: {photo.name}")
 
-    headline, caption = generate_texts(topic)
+    headline, caption, ai_cost = generate_texts(topic)
     print(f"\nHeadline: {headline}\n\nCaption:\n{caption}\n")
+    print(f"Odhadovana cena AI generovani: ${ai_cost:.4f}")
 
     READY_DIR.mkdir(exist_ok=True, parents=True)
     out_name = f"post_{topic['id']}_{photo.stem}.jpg"
@@ -269,6 +319,20 @@ def main():
 
     post_id = publish_to_instagram(image_url, caption)
     print(f"\nPublikováno! Post ID: {post_id}")
+
+    send_email_notification(
+        subject=f"IG post publikovan: {topic['title'][:60]}",
+        body=(
+            f"Novy Instagram post byl publikovan na @zurypavel.\n\n"
+            f"Tema [{topic['pillar_name']}]: {topic['title']}\n\n"
+            f"Headline na fotce: {headline}\n\n"
+            f"Popisek:\n{caption}\n\n"
+            f"Fotka: {photo.name}\n"
+            f"Odkaz na fotku: {image_url}\n"
+            f"Instagram post ID: {post_id}\n\n"
+            f"Odhadovana cena AI generovani textu: ${ai_cost:.4f}\n"
+        ),
+    )
 
     topic["used"] = True
     topic["used_date"] = datetime.date.today().isoformat()
